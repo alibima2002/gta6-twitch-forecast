@@ -164,7 +164,8 @@ const hourQuantiles = (p1: number, h: number, donors: Donor[]): number[] => {
     MIN_SPREAD,
     (quantile(nearLogs, 0.75) - quantile(nearLogs, 0.25)) / 1.349,
   );
-  const centre = (1 - LOCAL_WEIGHT) * regressed + LOCAL_WEIGHT * local;
+  // With too few donors to fit a line, trust the local median alone.
+  const centre = n < 3 ? local : (1 - LOCAL_WEIGHT) * regressed + LOCAL_WEIGHT * local;
   const qs = Z.map((z) => round2(p1 * Math.exp(centre + z * spread * SPREAD_WIDEN)));
   // Keep the row finite, positive, bounded and non-decreasing, whatever the data did.
   let prev = 1;
@@ -191,7 +192,13 @@ const forecastCase = (c: CaseFile): { hours: Array<{ hour: number; q: number[] }
   }
   // Prefer the rolling-midnight donors; fall back to every launch if none qualify.
   const donors = rolling.length > 0 ? rolling : all;
-  const hours = c.forecast.map(({ hour }) => ({ hour, q: hourQuantiles(p1, hour, donors) }));
+  // The case lists hours 2 to 24; if it ever lists none, forecast them anyway
+  // rather than writing an empty file, which would be an invalid case.
+  const hoursToForecast =
+    c.forecast.length > 0
+      ? c.forecast.map(({ hour }) => hour)
+      : Array.from({ length: 23 }, (_, i) => i + 2);
+  const hours = hoursToForecast.map((hour) => ({ hour, q: hourQuantiles(p1, hour, donors) }));
   return { hours };
 };
 
